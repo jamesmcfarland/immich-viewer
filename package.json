@@ -1,0 +1,13 @@
+{
+  "name": "immich-viewer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Simple self-hosted slideshow for an Immich album",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "sharp": "^0.34.2"
+  }
+}

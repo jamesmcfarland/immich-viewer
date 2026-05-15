@@ -4,6 +4,9 @@ WORKDIR /app
 
 RUN apk add --no-cache curl
 
+COPY package.json /app/package.json
+RUN npm install --omit=dev
+
 COPY server.js /app/server.js
 COPY config.example.json /app/config.example.json
 COPY public /app/public

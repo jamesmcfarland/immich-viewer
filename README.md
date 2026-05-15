@@ -3,6 +3,7 @@
 Simple self-hosted slideshow for an Immich album.
 
 It keeps the Immich API key on the server, fetches images from a chosen album, and displays them in a lightweight browser page designed to stay compatible with older Chromium builds.
+Images are normalized server-side before being sent to the browser so EXIF rotation does not depend on old browser behavior.
 
 ## Setup
 

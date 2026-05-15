@@ -2,6 +2,7 @@ var fs = require('fs');
 var http = require('http');
 var https = require('https');
 var path = require('path');
+var sharp = require('sharp');
 var url = require('url');
 
 var ROOT = __dirname;
@@ -249,11 +250,13 @@ function proxyThumbnail(assetId, response) {
     method: 'GET',
     headers: {
       'x-api-key': config.immich.apiKey,
-      'Accept': 'image/jpeg'
+      'Accept': 'image/*'
     }
   }, function (immichResponse) {
+    var chunks;
+
     if (immichResponse.statusCode < 200 || immichResponse.statusCode > 299) {
-      var chunks = [];
+      chunks = [];
 
       immichResponse.on('data', function (chunk) {
         chunks.push(chunk);
@@ -276,12 +279,39 @@ function proxyThumbnail(assetId, response) {
       return;
     }
 
-    response.writeHead(200, {
-      'Content-Type': immichResponse.headers['content-type'] || 'application/octet-stream',
-      'Cache-Control': 'public, max-age=300'
+    chunks = [];
+
+    immichResponse.on('data', function (chunk) {
+      chunks.push(chunk);
     });
 
-    immichResponse.pipe(response);
+    immichResponse.on('end', function () {
+      sharp(Buffer.concat(chunks))
+        .rotate()
+        .jpeg({
+          quality: 90,
+          mozjpeg: true
+        })
+        .toBuffer()
+        .then(function (outputBuffer) {
+          response.writeHead(200, {
+            'Content-Type': 'image/jpeg',
+            'Content-Length': outputBuffer.length,
+            'Cache-Control': 'public, max-age=300'
+          });
+
+          response.end(outputBuffer);
+        })
+        .catch(function (error) {
+          console.error(
+            'Image normalization failed for asset ' +
+            assetId +
+            ': ' +
+            error.message
+          );
+          sendText(response, 502, 'Could not normalize image');
+        });
+    });
   });
 
   request.on('error', function () {
