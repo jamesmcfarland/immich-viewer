@@ -2,6 +2,8 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+RUN apk add --no-cache curl
+
 COPY server.js /app/server.js
 COPY config.example.json /app/config.example.json
 COPY public /app/public
