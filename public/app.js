@@ -8,6 +8,7 @@
     album: null,
     slides: [],
     currentIndex: -1,
+    currentAssetId: null,
     activeSlide: null,
     timerId: null,
     refreshId: null
@@ -128,6 +129,44 @@
     return copy;
   }
 
+  function buildQueue(assets) {
+    var queue = assets.slice(0);
+    var currentItem = null;
+    var i;
+
+    if (state.config.slideshow.shuffle) {
+      queue = shuffle(queue);
+    }
+
+    if (!state.currentAssetId) {
+      return {
+        slides: queue,
+        currentIndex: -1
+      };
+    }
+
+    for (i = 0; i < queue.length; i += 1) {
+      if (queue[i].id === state.currentAssetId) {
+        currentItem = queue.splice(i, 1)[0];
+        break;
+      }
+    }
+
+    if (!currentItem) {
+      return {
+        slides: queue,
+        currentIndex: -1
+      };
+    }
+
+    queue.unshift(currentItem);
+
+    return {
+      slides: queue,
+      currentIndex: 0
+    };
+  }
+
   function forceReflow(element) {
     return element.offsetWidth;
   }
@@ -233,6 +272,7 @@
     setDateLabel(item.takenAt);
     setStatus((index + 1) + ' / ' + state.slides.length);
     state.currentIndex = index;
+    state.currentAssetId = item.id;
     app.className = 'app';
   }
 
@@ -286,11 +326,9 @@
 
       data = JSON.parse(text);
       state.album = data;
-      state.slides = data.assets.slice(0);
-
-      if (state.config.slideshow.shuffle) {
-        state.slides = shuffle(state.slides);
-      }
+      data = buildQueue(data.assets);
+      state.slides = data.slides;
+      state.currentIndex = data.currentIndex;
 
       setStatus(state.slides.length + ' images loaded');
 
