@@ -1,0 +1,22 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8080
+  },
+  "immich": {
+    "baseUrl": "https://immich.example.com",
+    "apiKey": "replace-with-your-api-key",
+    "albumId": "replace-with-your-album-id"
+  },
+  "slideshow": {
+    "refreshMinutes": 10,
+    "slideSeconds": 8,
+    "transitionMs": 1200,
+    "shuffle": true,
+    "imageSource": "preview",
+    "imageFit": "contain",
+    "background": "#000000",
+    "showCaption": true,
+    "showDate": false
+  }
+}
