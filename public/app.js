@@ -256,6 +256,11 @@
             }, state.config.slideshow.transitionMs + 80);
           }
 
+          setCaption(item.caption, showCaption);
+          setDateLabel(item.takenAt);
+          setStatus((index + 1) + ' / ' + state.slides.length);
+          state.currentIndex = index;
+          state.currentAssetId = item.id;
           state.activeSlide = slideParts.root;
         }, 30);
       }, 30);
@@ -268,11 +273,6 @@
     };
 
     slideParts.image.src = nextUrl;
-    setCaption(item.caption, showCaption);
-    setDateLabel(item.takenAt);
-    setStatus((index + 1) + ' / ' + state.slides.length);
-    state.currentIndex = index;
-    state.currentAssetId = item.id;
     app.className = 'app';
   }
 
