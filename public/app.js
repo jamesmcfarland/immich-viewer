@@ -10,8 +10,10 @@
     currentIndex: -1,
     currentAssetId: null,
     activeSlide: null,
+    queuedSlide: null,
     timerId: null,
-    refreshId: null
+    refreshId: null,
+    pendingIndex: -1
   };
 
   function xhrGet(target, callback) {
@@ -212,75 +214,11 @@
     }
   }
 
-  function showSlide(index) {
-    var item;
-    var nextUrl;
-    var showCaption;
-    var slideParts;
-    var previousSlide;
-
-    if (!state.slides.length) {
-      setStatus('No images found in this album.');
-      return;
-    }
-
-    item = state.slides[index];
-    nextUrl = '/image/' + encodeURIComponent(item.id);
-    showCaption = !!state.config.slideshow.showCaption;
-    slideParts = createSlide(nextUrl);
-    previousSlide = state.activeSlide;
-
-    if (previousSlide) {
-      previousSlide.style.zIndex = '1';
-    }
-
-    slideParts.root.style.zIndex = '2';
-    slidesEl.appendChild(slideParts.root);
-    forceReflow(slideParts.root);
-
-    slideParts.image.onload = function () {
-      forceReflow(slideParts.root);
-      slideParts.root.style.opacity = '0';
-
-      window.setTimeout(function () {
-        forceReflow(slideParts.root);
-
-        window.setTimeout(function () {
-          slideParts.root.style.opacity = '1';
-
-          if (previousSlide) {
-            previousSlide.style.opacity = '0';
-
-            window.setTimeout(function () {
-              removeSlide(previousSlide);
-            }, state.config.slideshow.transitionMs + 80);
-          }
-
-          setCaption(item.caption, showCaption);
-          setDateLabel(item.takenAt);
-          setStatus((index + 1) + ' / ' + state.slides.length);
-          state.currentIndex = index;
-          state.currentAssetId = item.id;
-          state.activeSlide = slideParts.root;
-        }, 30);
-      }, 30);
-    };
-
-    slideParts.image.onerror = function () {
-      removeSlide(slideParts.root);
-      setStatus('Could not load image. Moving on…');
-      window.setTimeout(nextSlide, 1000);
-    };
-
-    slideParts.image.src = nextUrl;
-    app.className = 'app';
-  }
-
-  function nextSlide() {
+  function getNextIndex() {
     var nextIndex = state.currentIndex + 1;
 
     if (!state.slides.length) {
-      return;
+      return -1;
     }
 
     if (nextIndex >= state.slides.length) {
@@ -291,16 +229,157 @@
       }
     }
 
-    showSlide(nextIndex);
+    return nextIndex;
+  }
+
+  function queueNextSlide(index, callback) {
+    var item;
+    var nextUrl;
+    var slideParts;
+
+    if (!state.slides.length || index < 0 || index >= state.slides.length) {
+      callback(new Error('No slide to queue'));
+      return;
+    }
+
+    item = state.slides[index];
+    nextUrl = '/image/' + encodeURIComponent(item.id);
+    slideParts = createSlide(nextUrl);
+
+    slideParts.image.onload = function () {
+      callback(null, {
+        index: index,
+        item: item,
+        slide: slideParts.root
+      });
+    };
+
+    slideParts.image.onerror = function () {
+      callback(new Error('Could not load image'));
+    };
+
+    slideParts.image.src = nextUrl;
+  }
+
+  function scheduleNextAdvance() {
+    if (state.timerId) {
+      window.clearTimeout(state.timerId);
+    }
+
+    state.timerId = window.setTimeout(function () {
+      advanceSlide();
+    }, state.config.slideshow.slideSeconds * 1000);
+  }
+
+  function primeNextSlide() {
+    var nextIndex = getNextIndex();
+
+    if (state.pendingIndex === nextIndex || (state.queuedSlide && state.queuedSlide.index === nextIndex)) {
+      return;
+    }
+
+    state.pendingIndex = nextIndex;
+
+    queueNextSlide(nextIndex, function (error, queued) {
+      if (state.pendingIndex !== nextIndex) {
+        return;
+      }
+
+      state.pendingIndex = -1;
+
+      if (error) {
+        setStatus('Could not load next image. Retrying…');
+        window.setTimeout(function () {
+          primeNextSlide();
+        }, 1000);
+        return;
+      }
+
+      state.queuedSlide = queued;
+    });
+  }
+
+  function activateQueuedSlide() {
+    var queued = state.queuedSlide;
+    var previousSlide = state.activeSlide;
+    var showCaption;
+
+    if (!queued) {
+      primeNextSlide();
+      return;
+    }
+
+    showCaption = !!state.config.slideshow.showCaption;
+
+    if (previousSlide) {
+      previousSlide.style.zIndex = '1';
+    }
+
+    queued.slide.style.zIndex = '2';
+    queued.slide.style.opacity = '0';
+    slidesEl.appendChild(queued.slide);
+    forceReflow(queued.slide);
+
+    window.setTimeout(function () {
+      forceReflow(queued.slide);
+
+      window.setTimeout(function () {
+        queued.slide.style.opacity = '1';
+
+        if (previousSlide) {
+          previousSlide.style.opacity = '0';
+
+          window.setTimeout(function () {
+            removeSlide(previousSlide);
+          }, state.config.slideshow.transitionMs + 80);
+        }
+
+        setCaption(queued.item.caption, showCaption);
+        setDateLabel(queued.item.takenAt);
+        setStatus((queued.index + 1) + ' / ' + state.slides.length);
+        state.currentIndex = queued.index;
+        state.currentAssetId = queued.item.id;
+        state.activeSlide = queued.slide;
+        state.queuedSlide = null;
+        app.className = 'app';
+        primeNextSlide();
+        scheduleNextAdvance();
+      }, 30);
+    }, 30);
+  }
+
+  function advanceSlide() {
+    if (!state.slides.length) {
+      setStatus('No images found in this album.');
+      return;
+    }
+
+    if (state.queuedSlide) {
+      activateQueuedSlide();
+      return;
+    }
+
+    setStatus('Loading next image…');
+    primeNextSlide();
+
+    window.setTimeout(function () {
+      if (state.queuedSlide) {
+        activateQueuedSlide();
+      } else {
+        advanceSlide();
+      }
+    }, 250);
   }
 
   function startSlideshow() {
     if (state.timerId) {
-      window.clearInterval(state.timerId);
+      window.clearTimeout(state.timerId);
     }
 
-    nextSlide();
-    state.timerId = window.setInterval(nextSlide, state.config.slideshow.slideSeconds * 1000);
+    state.queuedSlide = null;
+    state.pendingIndex = -1;
+    primeNextSlide();
+    advanceSlide();
   }
 
   function applyConfig(config) {
